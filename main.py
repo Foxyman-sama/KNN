@@ -1,11 +1,20 @@
+from operator import delitem
 from turtle import distance
 import numpy as np
 import matplotlib.pyplot as plt
 from mlxtend.plotting import plot_decision_regions
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, r2_score
-from sklearn.datasets import load_iris, load_diabetes
+from sklearn.datasets import load_iris, load_diabetes, load_wine
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+from sklearn.datasets import load_svmlight_file
+import csv
+from sklearn.decomposition import PCA
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.utils import Bunch
 
 
 class KNearestNeighbors:
@@ -45,42 +54,66 @@ def decision_boundary_plot(X, y, X_train, y_train, clf, feature_indexes, title):
     plt.show()
 
 
-X1, y1 = load_iris(return_X_y=True, as_frame=True)
-X1_train, X1_test, y1_train, y1_test = train_test_split(
-    X1.values, y1.values, random_state=0
+# https://www.kaggle.com/datasets/valakhorasani/mobile-device-usage-and-user-behavior-dataset?resource=download
+# Загрузка данных из CSV 700
+df = pd.read_csv("user_behavior_dataset.csv")
+
+# Просмотр первых 5 строк данных до преобразования
+print(df.head())
+
+# Преобразуем категориальные столбцы в числовые значения
+# Для этого будем использовать LabelEncoder для колонок, которые содержат текстовые данные
+
+# Преобразуем 'Device Model' в числовые значения
+encoder_device = LabelEncoder()
+df["Device Model"] = encoder_device.fit_transform(df["Device Model"])
+
+# Преобразуем 'Operating System' в числовые значения
+encoder_os = LabelEncoder()
+df["Operating System"] = encoder_os.fit_transform(df["Operating System"])
+
+# Преобразуем 'Gender' в числовые значения
+encoder_gender = LabelEncoder()
+df["Gender"] = encoder_gender.fit_transform(df["Gender"])
+
+# Просмотр первых 5 строк данных после преобразования
+print(df.head())
+
+# Теперь данные можно разделить на признаки и целевую переменную
+X = df.drop(
+    columns=["User ID", "User Behavior Class"]
+)  # Убираем 'User ID' и 'User Behavior Class' (это целевая переменная)
+
+# Вариант 1: выбор двух признаков вручную
+# X = df[["Age", "Screen On Time (hours/day)"]]
+y = df["User Behavior Class"]
+
+# Вариант 2: используем PCA для уменьшения признаков
+# PCA — это линейный метод, который помогает найти наиболее важные оси для данных (главные компоненты), которые объясняют наибольшую вариацию в данных.
+# Эти оси являются комбинацией исходных признаков.
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X)
+
+# Разделим данные на обучающую и тестовую выборки
+X_train, X_test, y_train, y_test = train_test_split(
+    X_pca, y, test_size=0.2, random_state=42
 )
-print(X1, y1, sep="\n")
 
-X2, y2 = load_diabetes(return_X_y=True, as_frame=True)
-X2_train, X2_test, y2_train, y2_test = train_test_split(
-    X2.values, y2.values, random_state=0
-)
-print(X2, y2, sep="\n")
+# Масштабируем данные (особенно важно, если признаки имеют разные масштабы, как в данном случае: часы и мегабайты)
+# Масштабирование признаков важно, чтобы привести все признаки к одному масштабу, улучшить сходимость и производительность модели.
+# Целевая переменная не масштабируется, чтобы сохранить её смысл (классы или реальный диапазон значений) и избежать искажения результата модели
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
 
-knn_clf = KNearestNeighbors()
-knn_clf.fit(X1_train, y1_train)
-knn_clf_pred_res = knn_clf.predict(X1_test)
-knn_clf_accuracy = accuracy_score(y1_test, knn_clf_pred_res)
+# Обучим модель (например, Logistic Regression)
+sk_knn_clf = KNeighborsClassifier(n_neighbors=3)
+sk_knn_clf.fit(X_train_scaled, y_train)
 
-print(f"KNN classifie accuracy: {knn_clf_accuracy:}")
-print(knn_clf_pred_res)
-
-knn_reg = KNearestNeighbors(regression=True)
-knn_reg.fit(X2_train, y2_train)
-knn_reg_pred_res = knn_reg.predict(X2_test)
-knn_reg_r2 = r2_score(y2_test, knn_reg_pred_res)
-
-print(f"KNN regressor R2 score: {knn_reg_r2}")
-print(knn_reg_pred_res)
-
-sk_knn_clf = KNeighborsClassifier()
-sk_knn_clf.fit(X1_train, y1_train)
-sk_knn_clf_pred_res = sk_knn_clf.predict(X1_test)
-sk_knn_clf_accuracy = accuracy_score(y1_test, sk_knn_clf_pred_res)
-
-print(f"sk KNN classifier accuracy: {sk_knn_clf_accuracy:}")
-print(sk_knn_clf_pred_res)
-
-feature_indexes = [2, 3]
-title1 = "KNeighborsClassifier surface"
-decision_boundary_plot(X1, y1, X1_train, y1_train, sk_knn_clf, feature_indexes, title1)
+# Визуализация решающей поверхности с помощью PCA
+plt.figure(figsize=(10, 6))
+plot_decision_regions(X_train_scaled, y_train.values, clf=sk_knn_clf, legend=2)
+plt.title("Решающая поверхность")
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.show()
